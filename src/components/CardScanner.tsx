@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback } from 'react'
-import { Camera, CameraOff, Search, RotateCcw, Loader2, ZoomIn } from 'lucide-react'
+import { Camera, CameraOff, Search, RotateCcw, Loader2, ZoomIn, FlipHorizontal2 } from 'lucide-react'
 import { searchCards, type PokemonCard } from '../services/pokemonTcgApi'
 import { analyzeCardImage, type PSAEstimation } from '../services/cardAnalysis'
 import CardDetails from './CardDetails'
@@ -20,12 +20,14 @@ export default function CardScanner() {
   const [psaEstimation, setPsaEstimation] = useState<PSAEstimation | null>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [searching, setSearching] = useState(false)
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment')
+  const [flipping, setFlipping] = useState(false)
 
-  const startCamera = useCallback(async () => {
+  const startCamera = useCallback(async (facing: 'environment' | 'user' = 'environment') => {
     setCameraError(null)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } },
+        video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 960 } },
       })
       streamRef.current = stream
       // Set mode first so the video element is mounted, then assign srcObject
@@ -40,6 +42,31 @@ export default function CardScanner() {
       setCameraError('Camera access denied or unavailable.')
     }
   }, [])
+
+  const flipCamera = useCallback(async () => {
+    if (flipping) return
+    setFlipping(true)
+    const next: 'environment' | 'user' = facingMode === 'environment' ? 'user' : 'environment'
+    // Stop existing stream
+    streamRef.current?.getTracks().forEach((t) => t.stop())
+    streamRef.current = null
+    setFacingMode(next)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: next }, width: { ideal: 1280 }, height: { ideal: 960 } },
+      })
+      streamRef.current = stream
+      await new Promise<void>((r) => requestAnimationFrame(() => r()))
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        videoRef.current.play().catch(() => {})
+      }
+    } catch {
+      setCameraError('Could not switch camera.')
+    } finally {
+      setFlipping(false)
+    }
+  }, [facingMode, flipping])
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop())
@@ -162,7 +189,7 @@ export default function CardScanner() {
             <p className="text-slate-500 text-sm">Get price, PSA grade, damage analysis, and more</p>
             {cameraError && <p className="text-red-400 text-sm">{cameraError}</p>}
             <button
-              onClick={startCamera}
+              onClick={() => startCamera(facingMode)}
               className="mt-2 px-6 py-3 bg-yellow-400 text-black font-bold rounded-xl hover:bg-yellow-300 transition-colors flex items-center gap-2"
             >
               <Camera className="w-5 h-5" /> Open Camera
@@ -185,7 +212,7 @@ export default function CardScanner() {
                 <div className="absolute -bottom-1 -right-1 w-4 h-4 border-b-2 border-r-2 border-yellow-400 rounded-br" />
               </div>
             </div>
-            <div className="absolute bottom-4 inset-x-0 flex justify-center gap-4">
+            <div className="absolute bottom-4 inset-x-0 flex justify-center items-center gap-4">
               <button
                 onClick={() => { stopCamera(); setMode('idle') }}
                 className="px-4 py-2 bg-slate-700/80 text-white rounded-xl flex items-center gap-2 hover:bg-slate-600 transition-colors"
@@ -197,6 +224,15 @@ export default function CardScanner() {
                 className="w-16 h-16 bg-yellow-400 rounded-full flex items-center justify-center hover:bg-yellow-300 transition-colors shadow-lg border-4 border-white/30"
               >
                 <div className="w-10 h-10 bg-white rounded-full" />
+              </button>
+              {/* Flip camera — rotates icon while switching */}
+              <button
+                onClick={flipCamera}
+                disabled={flipping}
+                className="w-12 h-12 bg-slate-700/80 text-white rounded-full flex items-center justify-center hover:bg-slate-600 transition-colors disabled:opacity-50"
+                title={facingMode === 'environment' ? 'Switch to front camera' : 'Switch to rear camera'}
+              >
+                <FlipHorizontal2 className={`w-5 h-5 transition-transform duration-300 ${flipping ? 'scale-x-[-1]' : ''}`} />
               </button>
             </div>
           </>
