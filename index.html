@@ -3,49 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="PokeSearch" />
+    <meta name="theme-color" content="#0a0a14" />
     <title>PokeSearch</title>
     <style>
-      /* Shown only when opened as a raw file (no dev server) */
-      #file-warning {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        min-height: 100vh;
-        background: #0a0a14;
-        color: #f1f5f9;
-        font-family: system-ui, sans-serif;
-        text-align: center;
-        padding: 2rem;
-        gap: 1rem;
-      }
-      #file-warning h1 { font-size: 1.5rem; font-weight: 900; color: #facc15; margin: 0; }
-      #file-warning p  { color: #94a3b8; margin: 0; max-width: 340px; line-height: 1.6; }
-      #file-warning code { background: #1e1e2e; color: #facc15; padding: 2px 8px; border-radius: 6px; font-size: 0.9rem; }
-      #file-warning a { color: #facc15; font-weight: 700; }
-      /* Hide warning once the app actually loads via the dev server */
-      #root:not(:empty) ~ #file-warning,
-      #root:not(:empty) + * { display: none !important; }
+      html, body { background: #0a0a14; margin: 0; }
     </style>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-
-    <!-- Only visible when opened as a raw file, not via the dev server -->
-    <div id="file-warning">
-      <div style="font-size:3rem">⚡</div>
-      <h1>PokeSearch needs the dev server</h1>
-      <p>You opened this as a plain file. PokeSearch is a web app that requires a local server to run.</p>
-      <p><strong style="color:#f1f5f9">To launch it:</strong><br/>
-        Double-click <code>Start PokeSearch.bat</code><br/>
-        in the <code>pokesearch</code> folder.
-      </p>
-      <p style="font-size:0.8rem">Or if you already started it:<br/>
-        Go to <a href="http://localhost:5174">http://localhost:5174</a>
-      </p>
-    </div>
   </body>
 </html>
