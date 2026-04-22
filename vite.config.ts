@@ -2,8 +2,10 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-export default defineConfig({
-  base: '/pokesearch/',
+export default defineConfig(({ command }) => ({
+  // Use /pokesearch/ base only for production builds (GitHub Pages)
+  // Dev server runs at / so it still works on localhost
+  base: command === 'build' ? '/pokesearch/' : '/',
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
@@ -29,4 +31,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))
