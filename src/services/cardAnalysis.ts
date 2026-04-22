@@ -47,28 +47,47 @@ function mean(arr: number[]): number {
   return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
 }
 
-// Corner wear shows as BRIGHT (white) pixels where the edge should be dark/colored.
-// A worn corner has high average brightness in that tiny region.
+// ─── Corner analysis ─────────────────────────────────────────────────────────
+// Detects TWO kinds of corner damage:
+//   1. Smooth white wear  — avg bright (>200) AND low variance (<30) = rubbed white
+//   2. Ripped / torn      — high variance (>45) = jagged edges, exposed paper core
+// A perfectly fine corner is NOT bright-white AND has moderate uniform variance.
+
 function analyzeCorner(
   data: Uint8ClampedArray,
   imgW: number,
   imgH: number,
   corner: 'tl' | 'tr' | 'bl' | 'br'
 ): { worn: boolean; severity: DamageRegion['severity']; brightness: number } {
-  const size = Math.floor(Math.min(imgW, imgH) * 0.055) // ~5.5% of shorter dimension
+  const size = Math.floor(Math.min(imgW, imgH) * 0.055)
   const x = corner.includes('r') ? imgW - size : 0
   const y = corner.includes('b') ? imgH - size : 0
   const samples = sampleBrightness(data, imgW, x, y, size, size)
   const avg = mean(samples)
   const dev = stdDev(samples)
 
-  // Worn corners are bright (whitened) AND have low variance (uniform white smear)
-  const worn = avg > 200 && dev < 30
-  const severity: DamageRegion['severity'] = avg > 230 ? 'major' : avg > 215 ? 'moderate' : 'minor'
+  // Type 1: smooth whitening (NM→LP wear)
+  const smoothWear = avg > 195 && dev < 35
+
+  // Type 2: ripped/torn/crushed — chaotic pixel variance
+  const tornOrCrushed = dev > 45
+
+  const worn = smoothWear || tornOrCrushed
+
+  let severity: DamageRegion['severity']
+  if (tornOrCrushed) {
+    severity = dev > 70 ? 'major' : dev > 55 ? 'moderate' : 'minor'
+  } else {
+    severity = avg > 228 ? 'major' : avg > 212 ? 'moderate' : 'minor'
+  }
+
   return { worn, severity, brightness: avg }
 }
 
-// Edge wear: look for high variance along a thin strip (fraying/nicks)
+// ─── Edge analysis ───────────────────────────────────────────────────────────
+// High variance along a thin strip = nicks, tears, fraying.
+// Threshold lowered so heavy ripping is caught as major.
+
 function analyzeEdge(
   data: Uint8ClampedArray,
   imgW: number,
@@ -85,13 +104,17 @@ function analyzeEdge(
 
   const samples = sampleBrightness(data, imgW, x, y, w, h)
   const dev = stdDev(samples)
-  // A clean edge has LOW variance (uniform color). Nicks/wear = high variance spikes.
-  const damaged = dev > 55
-  const severity: DamageRegion['severity'] = dev > 75 ? 'major' : dev > 63 ? 'moderate' : 'minor'
+
+  // Lowered from 55 → 45 so heavy tears are always caught
+  const damaged = dev > 45
+  const severity: DamageRegion['severity'] = dev > 70 ? 'major' : dev > 55 ? 'moderate' : 'minor'
   return { damaged, severity }
 }
 
-// Surface scratches: look for bright streaks across the main body
+// ─── Surface analysis ────────────────────────────────────────────────────────
+// High variance across the main body = scratches, creases, tears.
+// Threshold lowered from 65 → 55 to catch heavy damage.
+
 function analyzeSurface(
   data: Uint8ClampedArray,
   imgW: number,
@@ -102,9 +125,9 @@ function analyzeSurface(
   const cw = imgW - margin * 2, ch = imgH - margin * 2
   const samples = sampleBrightness(data, imgW, cx, cy, cw, ch)
   const dev = stdDev(samples)
-  // High surface variance = scratches/creases. Threshold higher than edges to avoid false positives.
-  const scratched = dev > 65
-  const severity: DamageRegion['severity'] = dev > 85 ? 'major' : dev > 73 ? 'moderate' : 'minor'
+
+  const scratched = dev > 55
+  const severity: DamageRegion['severity'] = dev > 78 ? 'major' : dev > 65 ? 'moderate' : 'minor'
   return { scratched, severity }
 }
 
@@ -123,10 +146,10 @@ export async function analyzeCardImage(canvas: HTMLCanvasElement): Promise<PSAEs
 
   // ── Corners ──────────────────────────────────────────────────────────
   const corners = [
-    { key: 'tl' as const, label: 'Top-left corner',     xPct: 0,       yPct: 0 },
-    { key: 'tr' as const, label: 'Top-right corner',    xPct: 94.5,    yPct: 0 },
-    { key: 'bl' as const, label: 'Bottom-left corner',  xPct: 0,       yPct: 94.5 },
-    { key: 'br' as const, label: 'Bottom-right corner', xPct: 94.5,    yPct: 94.5 },
+    { key: 'tl' as const, label: 'Top-left corner',     xPct: 0,    yPct: 0 },
+    { key: 'tr' as const, label: 'Top-right corner',    xPct: 94.5, yPct: 0 },
+    { key: 'bl' as const, label: 'Bottom-left corner',  xPct: 0,    yPct: 94.5 },
+    { key: 'br' as const, label: 'Bottom-right corner', xPct: 94.5, yPct: 94.5 },
   ]
 
   let wornCorners = 0
@@ -134,19 +157,23 @@ export async function analyzeCardImage(canvas: HTMLCanvasElement): Promise<PSAEs
     const result = analyzeCorner(data, w, h, c.key)
     if (result.worn) {
       wornCorners++
-      damageRegions.push({ x: c.xPct, y: c.yPct, width: 5.5, height: 5.5, type: 'corner', severity: result.severity, label: c.label })
+      damageRegions.push({
+        x: c.xPct, y: c.yPct, width: 5.5, height: 5.5,
+        type: 'corner', severity: result.severity, label: c.label,
+      })
     }
   }
 
   if (wornCorners === 0) reasoning.push('All four corners appear sharp and undamaged')
-  else reasoning.push(`${wornCorners} corner${wornCorners > 1 ? 's' : ''} show whitening/wear`)
+  else if (wornCorners === 4) reasoning.push('All four corners show damage — heavy wear or tearing detected')
+  else reasoning.push(`${wornCorners} corner${wornCorners > 1 ? 's' : ''} show whitening, wear, or tearing`)
 
   // ── Edges ────────────────────────────────────────────────────────────
   const edgeMap = [
-    { key: 'top' as const,    label: 'Top edge',    xPct: 5, yPct: 0,    wPct: 90, hPct: 3 },
-    { key: 'bottom' as const, label: 'Bottom edge', xPct: 5, yPct: 97,   wPct: 90, hPct: 3 },
-    { key: 'left' as const,   label: 'Left edge',   xPct: 0, yPct: 5,    wPct: 3,  hPct: 90 },
-    { key: 'right' as const,  label: 'Right edge',  xPct: 97, yPct: 5,   wPct: 3,  hPct: 90 },
+    { key: 'top' as const,    label: 'Top edge',    xPct: 5,  yPct: 0,  wPct: 90, hPct: 3 },
+    { key: 'bottom' as const, label: 'Bottom edge', xPct: 5,  yPct: 97, wPct: 90, hPct: 3 },
+    { key: 'left' as const,   label: 'Left edge',   xPct: 0,  yPct: 5,  wPct: 3,  hPct: 90 },
+    { key: 'right' as const,  label: 'Right edge',  xPct: 97, yPct: 5,  wPct: 3,  hPct: 90 },
   ]
 
   let damagedEdges = 0
@@ -154,35 +181,48 @@ export async function analyzeCardImage(canvas: HTMLCanvasElement): Promise<PSAEs
     const result = analyzeEdge(data, w, h, e.key)
     if (result.damaged) {
       damagedEdges++
-      damageRegions.push({ x: e.xPct, y: e.yPct, width: e.wPct, height: e.hPct, type: 'edge', severity: result.severity, label: e.label })
+      damageRegions.push({
+        x: e.xPct, y: e.yPct, width: e.wPct, height: e.hPct,
+        type: 'edge', severity: result.severity, label: e.label,
+      })
     }
   }
 
-  if (damagedEdges > 0) reasoning.push(`${damagedEdges} edge${damagedEdges > 1 ? 's' : ''} show nicks or wear`)
+  if (damagedEdges > 0)
+    reasoning.push(`${damagedEdges} edge${damagedEdges > 1 ? 's' : ''} show nicks, tears, or wear`)
 
   // ── Surface ──────────────────────────────────────────────────────────
   const surface = analyzeSurface(data, w, h)
   if (surface.scratched) {
-    damageRegions.push({ x: 8, y: 12, width: 84, height: 70, type: surface.severity === 'major' ? 'crease' : 'scratch', severity: surface.severity, label: surface.severity === 'major' ? 'Surface crease or heavy scratching' : 'Light surface scratches' })
-    reasoning.push(surface.severity === 'major' ? 'Significant surface damage detected' : 'Light surface scratching')
+    damageRegions.push({
+      x: 8, y: 12, width: 84, height: 70,
+      type: surface.severity === 'major' ? 'crease' : 'scratch',
+      severity: surface.severity,
+      label: surface.severity === 'major' ? 'Heavy surface damage / creasing' : 'Light surface scratches',
+    })
+    reasoning.push(
+      surface.severity === 'major' ? 'Significant surface damage or crease detected'
+        : surface.severity === 'moderate' ? 'Moderate surface scratching'
+        : 'Light surface scratching visible'
+    )
   } else {
     reasoning.push('Surface appears clean with no major scratches')
   }
 
-  // ── Grade calculation ─────────────────────────────────────────────
-  // Start from 9 — a card in hand is probably not gem mint.
-  // Deduct based on confirmed damage only.
-  let grade = 9
+  // ── Grade calculation ─────────────────────────────────────────────────
+  // Start at 8 — most cards being held up to a camera are NM, not gem mint.
+  // Heavier deductions than before so truly trashed cards actually bottom out.
+  let grade = 8
 
-  const majorDmg = damageRegions.filter(r => r.severity === 'major').length
-  const modDmg   = damageRegions.filter(r => r.severity === 'moderate').length
-  const minorDmg = damageRegions.filter(r => r.severity === 'minor').length
+  const majorDmg  = damageRegions.filter(r => r.severity === 'major').length
+  const modDmg    = damageRegions.filter(r => r.severity === 'moderate').length
+  const minorDmg  = damageRegions.filter(r => r.severity === 'minor').length
 
-  grade -= majorDmg  * 2.5
-  grade -= modDmg    * 1.2
-  grade -= minorDmg  * 0.4
+  grade -= majorDmg  * 3.0   // was 2.5
+  grade -= modDmg    * 1.5   // was 1.2
+  grade -= minorDmg  * 0.5   // was 0.4
 
-  // Clamp and round to nearest 0.5
+  // Clamp 1–9, round to nearest 0.5
   grade = Math.max(1, Math.min(9, Math.round(grade * 2) / 2))
 
   const labels: Record<number, string> = {
@@ -192,12 +232,10 @@ export async function analyzeCardImage(canvas: HTMLCanvasElement): Promise<PSAEs
   }
 
   const label = labels[grade] ?? 'Fair'
-  // Worth sending if PSA 8+ AND card has real value (check done in CardDetails)
   const shouldSend = grade >= 8
 
-  // Confidence: lower when few damage signals found (harder to be sure)
   const signals = damageRegions.length
-  const confidence = signals === 0 ? 0.55 : signals <= 2 ? 0.70 : 0.80
+  const confidence = signals === 0 ? 0.55 : signals <= 2 ? 0.70 : 0.82
 
   reasoning.push('Note: For official grading, always consult a PSA-certified submission.')
 
