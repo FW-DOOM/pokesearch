@@ -160,11 +160,24 @@ export interface TcgSet {
 }
 
 export async function getSets(): Promise<TcgSet[]> {
-  return withCache('sets:all', TTL.CARDS, async () => {
-    const res = await fetch(`${BASE}/sets?orderBy=-releaseDate&pageSize=50`)
-    if (!res.ok) throw new Error('Failed to fetch sets')
-    const json = await res.json()
-    return json.data as TcgSet[]
+  return withCache('sets:all', TTL.CARDS * 6, async () => {
+    // Fetch all sets across multiple pages (API max is 250 per page)
+    const firstRes = await fetch(`${BASE}/sets?orderBy=-releaseDate&pageSize=250`)
+    if (!firstRes.ok) throw new Error('Failed to fetch sets')
+    const firstJson = await firstRes.json()
+    const allSets: TcgSet[] = firstJson.data ?? []
+
+    // If there are more pages, fetch them too
+    const total: number = firstJson.totalCount ?? allSets.length
+    if (total > 250) {
+      const page2 = await fetch(`${BASE}/sets?orderBy=-releaseDate&pageSize=250&page=2`)
+      if (page2.ok) {
+        const j2 = await page2.json()
+        allSets.push(...(j2.data ?? []))
+      }
+    }
+
+    return allSets
   })
 }
 

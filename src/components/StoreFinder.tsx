@@ -175,55 +175,80 @@ export default function StoreFinder() {
               .filter((s) => s.inStock && s.distanceMiles)
               .sort((a, b) => (a.distanceMiles ?? 99) - (b.distanceMiles ?? 99))[0]
 
+            // Lowest confirmed price across all in-stock stores
+            const inStockWithPrice = product.stores.filter(s => s.inStock && s.price && s.price > 0)
+            const cheapest = inStockWithPrice.length > 0
+              ? inStockWithPrice.reduce((b, s) => (s.price ?? 999) < (b.price ?? 999) ? s : b)
+              : null
+            const lowestPrice = cheapest ? {
+              price: cheapest.price!,
+              store: cheapest.storeName.replace(/^Target — .+$/, 'Target'),
+              distance: cheapest.distanceMiles,
+            } : null
+
             return (
               <div
                 key={product.id}
                 onClick={() => setSelectedProduct(product)}
                 className="bg-slate-800 rounded-xl p-4 cursor-pointer hover:bg-slate-700 transition-colors border border-slate-700 hover:border-yellow-400/40"
               >
+                {/* Product image + name + type */}
                 <div className="flex gap-3 items-start">
-                  <div className="w-14 h-14 rounded-lg bg-slate-700 flex items-center justify-center overflow-hidden shrink-0">
+                  <div className="w-14 h-14 rounded-lg bg-slate-700 flex items-center justify-center overflow-hidden shrink-0 relative">
                     <img
                       src={product.imageUrl}
                       alt={product.name}
                       className="w-full h-full object-contain p-1"
-                      onError={(e) => {
-                        ;(e.target as HTMLImageElement).style.display = 'none'
-                      }}
+                      onError={(e) => { ;(e.target as HTMLImageElement).style.display = 'none' }}
                     />
                     <Package className="w-7 h-7 text-slate-500 absolute" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-white text-sm leading-tight">{product.name}</p>
                     <p className="text-xs text-slate-400 mt-0.5">{TYPE_LABELS[product.type]}</p>
-                    <p className="text-yellow-400 font-bold text-sm mt-1">${product.price.toFixed(2)}</p>
                   </div>
                 </div>
 
-                <div className="mt-3 flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    {anyInStock ? (
+                {/* Lowest price + stock status — big and prominent */}
+                <div className="mt-3 flex items-end justify-between">
+                  <div>
+                    {lowestPrice !== null ? (
                       <>
-                        <CheckCircle className="w-4 h-4 text-green-400" />
-                        <span className="text-green-400 text-xs font-medium">
-                          {closestInStock ? `${closestInStock.distanceMiles}mi away` : 'In Stock'}
-                        </span>
-                      </>
-                    ) : allUnknown ? (
-                      <>
-                        <HelpCircle className="w-4 h-4 text-slate-400" />
-                        <span className="text-slate-400 text-xs font-medium">Check Store</span>
+                        <p className="text-yellow-400 font-black text-2xl leading-none">${lowestPrice.price.toFixed(2)}</p>
+                        <p className="text-slate-500 text-xs mt-0.5">
+                          Best price · <span className="text-slate-400">{lowestPrice.store}</span>
+                          {lowestPrice.distance ? ` · ${lowestPrice.distance}mi` : ''}
+                        </p>
                       </>
                     ) : (
-                      <>
-                        <XCircle className="w-4 h-4 text-red-400" />
-                        <span className="text-red-400 text-xs font-medium">Out of Stock</span>
-                      </>
+                      <p className="text-slate-400 font-bold text-lg">${product.price.toFixed(2)}</p>
                     )}
                   </div>
-                  <span className="text-slate-500 text-xs">
-                    {product.stores.filter((s) => s.inStock).length}/{product.stores.length} stores
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <div className="flex items-center gap-1.5">
+                      {anyInStock ? (
+                        <>
+                          <CheckCircle className="w-4 h-4 text-green-400" />
+                          <span className="text-green-400 text-xs font-medium">
+                            {closestInStock ? `${closestInStock.distanceMiles}mi` : 'In Stock'}
+                          </span>
+                        </>
+                      ) : allUnknown ? (
+                        <>
+                          <HelpCircle className="w-4 h-4 text-slate-400" />
+                          <span className="text-slate-400 text-xs font-medium">Check Store</span>
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="w-4 h-4 text-red-400" />
+                          <span className="text-red-400 text-xs font-medium">Out of Stock</span>
+                        </>
+                      )}
+                    </div>
+                    <span className="text-slate-600 text-xs">
+                      {product.stores.filter(s => s.inStock).length}/{product.stores.length} stores
+                    </span>
+                  </div>
                 </div>
               </div>
             )
