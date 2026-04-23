@@ -1,7 +1,10 @@
 import { withCache, TTL } from './cache'
 
 // Only allow https:// links to known retail domains — prevents javascript: injection
-const ALLOWED_DOMAINS = ['target.com', 'walmart.com', 'gamestop.com', 'bestbuy.com', 'amazon.com']
+const ALLOWED_DOMAINS = [
+  'target.com', 'walmart.com', 'gamestop.com', 'bestbuy.com', 'amazon.com',
+  'fivebelow.com', 'costco.com', 'hottopic.com', 'tcgplayer.com', 'ebay.com',
+]
 function safeUrl(url: string | undefined, fallback: string): string {
   if (!url) return fallback
   try {
@@ -24,7 +27,7 @@ export interface StoreProduct {
 
 export interface StoreStock {
   storeName: string
-  storeType: 'target' | 'walmart' | 'gamestop' | 'bestbuy' | 'amazon' | 'local'
+  storeType: 'target' | 'walmart' | 'gamestop' | 'bestbuy' | 'amazon' | 'fivebelow' | 'costco' | 'hottopic' | 'tcgplayer' | 'ebay' | 'local'
   inStock: boolean
   stockUnknown?: boolean   // true = couldn't confirm, show "Check Store" instead of Out of Stock
   distanceMiles?: number
@@ -228,8 +231,14 @@ async function fetchNearbyProducts(lat: number, lon: number): Promise<StoreProdu
       })
 
       storeStocks.push(
-        { storeName: 'GameStop', storeType: 'gamestop', inStock: false, storeUrl: `https://www.gamestop.com/search#q=${encodeURIComponent(title)}` },
-        { storeName: 'Amazon', storeType: 'amazon', inStock: true, storeUrl: `https://www.amazon.com/s?k=pokemon+${encodeURIComponent(title)}`, price: price * 1.05 }
+        { storeName: 'GameStop',  storeType: 'gamestop',  inStock: false, stockUnknown: true, storeUrl: `https://www.gamestop.com/search#q=${encodeURIComponent(title)}` },
+        { storeName: 'Best Buy',  storeType: 'bestbuy',   inStock: false, stockUnknown: true, storeUrl: `https://www.bestbuy.com/site/searchpage.jsp?st=${encodeURIComponent(title)}` },
+        { storeName: 'Five Below', storeType: 'fivebelow', inStock: false, stockUnknown: true, storeUrl: `https://www.fivebelow.com/search?query=${encodeURIComponent(title)}` },
+        { storeName: 'Costco',    storeType: 'costco',    inStock: false, stockUnknown: true, storeUrl: `https://www.costco.com/catalogsearch/results?keyword=${encodeURIComponent(title)}` },
+        { storeName: 'Hot Topic', storeType: 'hottopic',  inStock: false, stockUnknown: true, storeUrl: `https://www.hottopic.com/search?q=${encodeURIComponent(title)}` },
+        { storeName: 'TCGPlayer', storeType: 'tcgplayer', inStock: false, stockUnknown: true, storeUrl: `https://www.tcgplayer.com/search/pokemon/product?q=${encodeURIComponent(title)}` },
+        { storeName: 'eBay',      storeType: 'ebay',      inStock: false, stockUnknown: true, storeUrl: `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(title)}+pokemon+sealed` },
+        { storeName: 'Amazon',    storeType: 'amazon',    inStock: false, stockUnknown: true, storeUrl: `https://www.amazon.com/s?k=pokemon+${encodeURIComponent(title)}` },
       )
 
       products.push({ id: tp.tcin, name: title, type, price, imageUrl: image, tcin: tp.tcin, stores: storeStocks })
@@ -326,11 +335,16 @@ function getFallbackProducts(_lat: number, _lon: number): StoreProduct[] {
     return {
       ...product,
       stores: [
-        { storeName: 'Target',   storeType: 'target'   as const, inStock: false, stockUnknown: true, storeUrl: `https://www.target.com/s?searchTerm=${encodeURIComponent(p.name)}`,                  price: p.price },
-        { storeName: 'Walmart',  storeType: 'walmart'  as const, inStock: false, stockUnknown: true, storeUrl: `https://www.walmart.com/search?q=${encodeURIComponent(p.name)}`,                     price: p.price },
-        { storeName: 'GameStop', storeType: 'gamestop' as const, inStock: false, stockUnknown: true, storeUrl: `https://www.gamestop.com/search#q=${encodeURIComponent(p.name)}`,                    price: p.price },
-        { storeName: 'Best Buy', storeType: 'bestbuy'  as const, inStock: false, stockUnknown: true, storeUrl: `https://www.bestbuy.com/site/searchpage.jsp?st=${encodeURIComponent(p.name)}`,       price: p.price },
-        { storeName: 'Amazon',   storeType: 'amazon'   as const, inStock: false, stockUnknown: true, storeUrl: `https://www.amazon.com/s?k=pokemon+${encodeURIComponent(p.name)}`,                  price: p.price * 1.1 },
+        { storeName: 'Target',     storeType: 'target'    as const, inStock: false, stockUnknown: true, storeUrl: `https://www.target.com/s?searchTerm=${encodeURIComponent(p.name)}`,                        price: p.price },
+        { storeName: 'Walmart',    storeType: 'walmart'   as const, inStock: false, stockUnknown: true, storeUrl: `https://www.walmart.com/search?q=${encodeURIComponent(p.name)}`,                           price: p.price },
+        { storeName: 'GameStop',   storeType: 'gamestop'  as const, inStock: false, stockUnknown: true, storeUrl: `https://www.gamestop.com/search#q=${encodeURIComponent(p.name)}`,                          price: p.price },
+        { storeName: 'Best Buy',   storeType: 'bestbuy'   as const, inStock: false, stockUnknown: true, storeUrl: `https://www.bestbuy.com/site/searchpage.jsp?st=${encodeURIComponent(p.name)}`,             price: p.price },
+        { storeName: 'Five Below', storeType: 'fivebelow' as const, inStock: false, stockUnknown: true, storeUrl: `https://www.fivebelow.com/search?query=${encodeURIComponent(p.name)}` },
+        { storeName: 'Costco',     storeType: 'costco'    as const, inStock: false, stockUnknown: true, storeUrl: `https://www.costco.com/catalogsearch/results?keyword=${encodeURIComponent(p.name)}`,       price: parseFloat((p.price * 0.9).toFixed(2)) },
+        { storeName: 'Hot Topic',  storeType: 'hottopic'  as const, inStock: false, stockUnknown: true, storeUrl: `https://www.hottopic.com/search?q=${encodeURIComponent(p.name)}`,                          price: p.price },
+        { storeName: 'TCGPlayer',  storeType: 'tcgplayer' as const, inStock: false, stockUnknown: true, storeUrl: `https://www.tcgplayer.com/search/pokemon/product?q=${encodeURIComponent(p.name)}` },
+        { storeName: 'eBay',       storeType: 'ebay'      as const, inStock: false, stockUnknown: true, storeUrl: `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(p.name)}+pokemon+sealed` },
+        { storeName: 'Amazon',     storeType: 'amazon'    as const, inStock: false, stockUnknown: true, storeUrl: `https://www.amazon.com/s?k=pokemon+${encodeURIComponent(p.name)}`,                         price: parseFloat((p.price * 1.1).toFixed(2)) },
       ] as StoreStock[],
     }
   })

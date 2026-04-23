@@ -4,12 +4,17 @@ import { useGeolocation } from '../hooks/useGeolocation'
 import { getNearbyProducts, type StoreProduct, type StoreStock } from '../services/storeInventory'
 
 const STORE_COLORS: Record<string, string> = {
-  target: 'bg-red-600',
-  walmart: 'bg-blue-600',
-  gamestop: 'bg-yellow-600',
-  bestbuy: 'bg-blue-800',
-  amazon: 'bg-orange-500',
-  local: 'bg-green-600',
+  target:    'bg-red-600',
+  walmart:   'bg-blue-600',
+  gamestop:  'bg-yellow-600',
+  bestbuy:   'bg-blue-800',
+  amazon:    'bg-orange-500',
+  fivebelow: 'bg-purple-600',
+  costco:    'bg-cyan-700',
+  hottopic:  'bg-pink-700',
+  tcgplayer: 'bg-violet-600',
+  ebay:      'bg-yellow-500',
+  local:     'bg-green-600',
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -295,6 +300,18 @@ function getRestockInfo(storeType: StoreStock['storeType'], productType: StorePr
       return { schedule: 'Tue & Wed with weekly ad', tip: 'Best Buy restocks with weekly sale cycles. Check online pickup availability first.', urgency: 'low' }
     case 'amazon':
       return { schedule: 'Continuously (third-party sellers)', tip: 'Prime-fulfilled listings restock fastest. Watch for price spikes on hot sets.', urgency: 'low' }
+    case 'fivebelow':
+      return isHotProduct
+        ? { schedule: 'Very limited — check weekly new arrivals', tip: 'Five Below occasionally gets single packs on hot sets. Stock is tiny and sells in hours.', urgency: 'high' }
+        : { schedule: 'Varies — usually single packs only', tip: 'Five Below typically carries $5 individual booster packs. Great for casual openings.', urgency: 'low' }
+    case 'costco':
+      return { schedule: 'Seasonal — tied to set release windows', tip: 'Costco bundles ETBs and boxes at a slight discount. Check the app or walk the seasonal aisle.', urgency: isBox ? 'medium' : 'low' }
+    case 'hottopic':
+      return { schedule: 'Weekly shipments — varies by location', tip: 'Hot Topic carries special editions and tins. Check online store pickup availability before visiting.', urgency: 'low' }
+    case 'tcgplayer':
+      return { schedule: 'Continuous — marketplace with many sellers', tip: 'TCGPlayer has sealed product from verified sellers. Compare listings and check seller ratings.', urgency: 'low' }
+    case 'ebay':
+      return { schedule: 'Continuous — auctions end at any time', tip: 'Filter by "Buy It Now" + "Sold listings" to gauge fair prices. Check seller feedback before buying.', urgency: 'low' }
     default:
       return { schedule: 'Varies by store', tip: 'Call ahead to confirm before making a trip.', urgency: 'low' }
   }
