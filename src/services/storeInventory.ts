@@ -237,7 +237,6 @@ async function fetchNearbyProducts(lat: number, lon: number): Promise<StoreProdu
         { storeName: 'Costco',    storeType: 'costco',    inStock: false, stockUnknown: true, storeUrl: `https://www.costco.com/catalogsearch/results?keyword=${encodeURIComponent(title)}` },
         { storeName: 'Hot Topic', storeType: 'hottopic',  inStock: false, stockUnknown: true, storeUrl: `https://www.hottopic.com/search?q=${encodeURIComponent(title)}` },
         { storeName: 'TCGPlayer', storeType: 'tcgplayer', inStock: false, stockUnknown: true, storeUrl: `https://www.tcgplayer.com/search/pokemon/product?q=${encodeURIComponent(title)}` },
-        { storeName: 'eBay',      storeType: 'ebay',      inStock: false, stockUnknown: true, storeUrl: `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(title)}+pokemon+sealed` },
         { storeName: 'Amazon',    storeType: 'amazon',    inStock: false, stockUnknown: true, storeUrl: `https://www.amazon.com/s?k=pokemon+${encodeURIComponent(title)}` },
       )
 
@@ -343,7 +342,6 @@ function getFallbackProducts(_lat: number, _lon: number): StoreProduct[] {
         { storeName: 'Costco',     storeType: 'costco'    as const, inStock: false, stockUnknown: true, storeUrl: `https://www.costco.com/catalogsearch/results?keyword=${encodeURIComponent(p.name)}`,       price: parseFloat((p.price * 0.9).toFixed(2)) },
         { storeName: 'Hot Topic',  storeType: 'hottopic'  as const, inStock: false, stockUnknown: true, storeUrl: `https://www.hottopic.com/search?q=${encodeURIComponent(p.name)}`,                          price: p.price },
         { storeName: 'TCGPlayer',  storeType: 'tcgplayer' as const, inStock: false, stockUnknown: true, storeUrl: `https://www.tcgplayer.com/search/pokemon/product?q=${encodeURIComponent(p.name)}` },
-        { storeName: 'eBay',       storeType: 'ebay'      as const, inStock: false, stockUnknown: true, storeUrl: `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(p.name)}+pokemon+sealed` },
         { storeName: 'Amazon',     storeType: 'amazon'    as const, inStock: false, stockUnknown: true, storeUrl: `https://www.amazon.com/s?k=pokemon+${encodeURIComponent(p.name)}`,                         price: parseFloat((p.price * 1.1).toFixed(2)) },
       ] as StoreStock[],
     }
