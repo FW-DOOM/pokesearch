@@ -244,62 +244,94 @@ export async function getNearbyProducts(lat: number, lon: number): Promise<Store
   return withCache(key, TTL.STORES, () => fetchNearbyProducts(lat, lon))
 }
 
-// ─── Fallback (shown if APIs are blocked / fail) ──────────────────────────────
+// ─── Fallback product catalog ─────────────────────────────────────────────────
+// Used when the Target/Walmart proxy APIs are unavailable (e.g. on GitHub Pages).
+// Stock is always unknown — we link directly to each retailer's search page.
+// Products are grouped: current retail sets → older retail → vintage/secondary market
 
-const CURATED: Omit<StoreProduct, 'stores'>[] = [
-  { id: 'sv-prismatic-etb', name: 'Prismatic Evolutions Elite Trainer Box', type: 'elite-trainer-box', price: 49.99, imageUrl: 'https://images.pokemontcg.io/sv8pt5/logo.png' },
-  { id: 'sv-surging-sparks-etb', name: 'Surging Sparks Elite Trainer Box', type: 'elite-trainer-box', price: 49.99, imageUrl: 'https://images.pokemontcg.io/sv8/logo.png' },
-  { id: 'sv-scarlet-violet-booster', name: 'Scarlet & Violet Booster Pack', type: 'booster-pack', price: 4.99, imageUrl: 'https://images.pokemontcg.io/sv1/logo.png' },
-  { id: 'sv-temporal-forces-bbox', name: 'Temporal Forces Booster Box', type: 'booster-box', price: 119.99, imageUrl: 'https://images.pokemontcg.io/sv5/logo.png' },
-  { id: 'paldean-fates-etb', name: 'Paldean Fates Elite Trainer Box', type: 'elite-trainer-box', price: 49.99, imageUrl: 'https://images.pokemontcg.io/sv4pt5/logo.png' },
-  { id: '151-etb', name: 'Pokemon 151 Elite Trainer Box', type: 'elite-trainer-box', price: 49.99, imageUrl: 'https://images.pokemontcg.io/sv3pt5/logo.png' },
-  { id: 'charizard-collection', name: 'Charizard ex Premium Collection', type: 'collection', price: 39.99, imageUrl: 'https://images.pokemontcg.io/sv3/logo.png' },
-  { id: 'paradox-rift-pack', name: 'Paradox Rift Booster Pack', type: 'booster-pack', price: 4.99, imageUrl: 'https://images.pokemontcg.io/sv4/logo.png' },
+interface CuratedProduct extends Omit<StoreProduct, 'stores'> {
+  vintage?: boolean   // true = not sold at Target/Walmart, link to TCGPlayer/eBay
+}
+
+const CURATED: CuratedProduct[] = [
+  // ── Current Scarlet & Violet retail (Target / Walmart / GameStop) ──────────
+  { id: 'sv-prismatic-etb',        name: 'Prismatic Evolutions Elite Trainer Box',  type: 'elite-trainer-box', price: 49.99,  imageUrl: 'https://images.pokemontcg.io/sv8pt5/logo.png' },
+  { id: 'sv-prismatic-bbox',       name: 'Prismatic Evolutions Booster Box',         type: 'booster-box',       price: 143.64, imageUrl: 'https://images.pokemontcg.io/sv8pt5/logo.png' },
+  { id: 'sv-prismatic-pack',       name: 'Prismatic Evolutions Booster Pack',        type: 'booster-pack',      price: 4.99,   imageUrl: 'https://images.pokemontcg.io/sv8pt5/logo.png' },
+  { id: 'sv-surging-sparks-etb',   name: 'Surging Sparks Elite Trainer Box',         type: 'elite-trainer-box', price: 49.99,  imageUrl: 'https://images.pokemontcg.io/sv8/logo.png' },
+  { id: 'sv-surging-sparks-bbox',  name: 'Surging Sparks Booster Box',               type: 'booster-box',       price: 143.64, imageUrl: 'https://images.pokemontcg.io/sv8/logo.png' },
+  { id: 'sv-stellar-crown-etb',    name: 'Stellar Crown Elite Trainer Box',          type: 'elite-trainer-box', price: 49.99,  imageUrl: 'https://images.pokemontcg.io/sv7/logo.png' },
+  { id: 'sv-shrouded-fable-etb',   name: 'Shrouded Fable Elite Trainer Box',         type: 'elite-trainer-box', price: 49.99,  imageUrl: 'https://images.pokemontcg.io/sv6pt5/logo.png' },
+  { id: 'sv-twilight-masq-etb',    name: 'Twilight Masquerade Elite Trainer Box',    type: 'elite-trainer-box', price: 49.99,  imageUrl: 'https://images.pokemontcg.io/sv6/logo.png' },
+  { id: 'sv-temporal-forces-etb',  name: 'Temporal Forces Elite Trainer Box',        type: 'elite-trainer-box', price: 49.99,  imageUrl: 'https://images.pokemontcg.io/sv5/logo.png' },
+  { id: 'sv-temporal-forces-bbox', name: 'Temporal Forces Booster Box',              type: 'booster-box',       price: 143.64, imageUrl: 'https://images.pokemontcg.io/sv5/logo.png' },
+  { id: 'paldean-fates-etb',       name: 'Paldean Fates Elite Trainer Box',          type: 'elite-trainer-box', price: 49.99,  imageUrl: 'https://images.pokemontcg.io/sv4pt5/logo.png' },
+  { id: 'sv-paradox-rift-etb',     name: 'Paradox Rift Elite Trainer Box',           type: 'elite-trainer-box', price: 49.99,  imageUrl: 'https://images.pokemontcg.io/sv4/logo.png' },
+  { id: '151-etb',                 name: 'Pokémon 151 Elite Trainer Box',            type: 'elite-trainer-box', price: 49.99,  imageUrl: 'https://images.pokemontcg.io/sv3pt5/logo.png' },
+  { id: 'sv-obsidian-etb',         name: 'Obsidian Flames Elite Trainer Box',        type: 'elite-trainer-box', price: 49.99,  imageUrl: 'https://images.pokemontcg.io/sv3/logo.png' },
+  { id: 'sv-charizard-collection', name: 'Charizard ex Premium Collection',          type: 'collection',        price: 39.99,  imageUrl: 'https://images.pokemontcg.io/sv3/logo.png' },
+  { id: 'sv-pikachu-tin',          name: 'Pikachu ex Tin',                           type: 'tin',               price: 19.99,  imageUrl: 'https://images.pokemontcg.io/sv1/logo.png' },
+  { id: 'sv-scarlet-violet-etb',   name: 'Scarlet & Violet Elite Trainer Box',       type: 'elite-trainer-box', price: 49.99,  imageUrl: 'https://images.pokemontcg.io/sv1/logo.png' },
+
+  // ── Sword & Shield era (still common at retail) ───────────────────────────
+  { id: 'swsh-silver-tempest-etb', name: 'Silver Tempest Elite Trainer Box',         type: 'elite-trainer-box', price: 44.99,  imageUrl: 'https://images.pokemontcg.io/swsh12/logo.png' },
+  { id: 'swsh-lost-origin-etb',    name: 'Lost Origin Elite Trainer Box',            type: 'elite-trainer-box', price: 44.99,  imageUrl: 'https://images.pokemontcg.io/swsh11/logo.png' },
+  { id: 'swsh-fusion-strike-etb',  name: 'Fusion Strike Elite Trainer Box',          type: 'elite-trainer-box', price: 44.99,  imageUrl: 'https://images.pokemontcg.io/swsh8/logo.png' },
+  { id: 'swsh-brilliant-stars-etb','name': 'Brilliant Stars Elite Trainer Box',      type: 'elite-trainer-box', price: 44.99,  imageUrl: 'https://images.pokemontcg.io/swsh9/logo.png' },
+  { id: 'swsh-celebrations',       name: 'Celebrations 25th Anniversary ETB',        type: 'elite-trainer-box', price: 49.99,  imageUrl: 'https://images.pokemontcg.io/cel25/logo.png' },
+  { id: 'swsh-vmax-charizard',     name: 'Charizard VMAX Premium Collection',        type: 'collection',        price: 39.99,  imageUrl: 'https://images.pokemontcg.io/swsh3/logo.png' },
+
+  // ── Vintage — secondary market only (TCGPlayer / eBay) ────────────────────
+  { id: 'base-set-pack',           name: 'Base Set Booster Pack (1999)',             type: 'booster-pack',      price: 399.99, imageUrl: 'https://images.pokemontcg.io/base1/logo.png',    vintage: true },
+  { id: 'team-rocket-pack',        name: 'Team Rocket Booster Pack (2000)',          type: 'booster-pack',      price: 89.99,  imageUrl: 'https://images.pokemontcg.io/base2/logo.png',    vintage: true },
+  { id: 'jungle-pack',             name: 'Jungle Booster Pack (1999)',               type: 'booster-pack',      price: 149.99, imageUrl: 'https://images.pokemontcg.io/base3/logo.png',    vintage: true },
+  { id: 'fossil-pack',             name: 'Fossil Booster Pack (1999)',               type: 'booster-pack',      price: 129.99, imageUrl: 'https://images.pokemontcg.io/base4/logo.png',    vintage: true },
+  { id: 'gym-heroes-pack',         name: 'Gym Heroes Booster Pack (2000)',           type: 'booster-pack',      price: 79.99,  imageUrl: 'https://images.pokemontcg.io/gym1/logo.png',     vintage: true },
+  { id: 'gym-challenge-pack',      name: 'Gym Challenge Booster Pack (2000)',        type: 'booster-pack',      price: 74.99,  imageUrl: 'https://images.pokemontcg.io/gym2/logo.png',     vintage: true },
+  { id: 'neo-genesis-pack',        name: 'Neo Genesis Booster Pack (2000)',          type: 'booster-pack',      price: 69.99,  imageUrl: 'https://images.pokemontcg.io/neo1/logo.png',     vintage: true },
+  { id: 'neo-discovery-pack',      name: 'Neo Discovery Booster Pack (2001)',        type: 'booster-pack',      price: 59.99,  imageUrl: 'https://images.pokemontcg.io/neo2/logo.png',     vintage: true },
+  { id: 'neo-revelation-pack',     name: 'Neo Revelation Booster Pack (2001)',       type: 'booster-pack',      price: 64.99,  imageUrl: 'https://images.pokemontcg.io/neo3/logo.png',     vintage: true },
+  { id: 'neo-destiny-pack',        name: 'Neo Destiny Booster Pack (2002)',          type: 'booster-pack',      price: 89.99,  imageUrl: 'https://images.pokemontcg.io/neo4/logo.png',     vintage: true },
 ]
 
-function getFallbackProducts(lat: number, lon: number): StoreProduct[] {
-  const seed = Math.abs(Math.floor(lat * 100 + lon * 100)) % 10
-  // When the live API is unavailable we can't know real stock — mark all as unknown
-  // so we never lie to the user about availability
-  return CURATED.map((p) => ({
-    ...p,
-    stores: [
-      {
-        storeName: 'Target', storeType: 'target' as const,
-        inStock: false, stockUnknown: true,
-        distanceMiles: parseFloat((0.5 + (seed % 5)).toFixed(1)),
-        address: 'See Target.com for nearby stores',
-        storeUrl: `https://www.target.com/s?searchTerm=${encodeURIComponent(p.name)}`,
-        price: p.price,
-      },
-      {
-        storeName: 'Walmart', storeType: 'walmart' as const,
-        inStock: false, stockUnknown: true,
-        distanceMiles: parseFloat((1.2 + (seed % 4)).toFixed(1)),
-        address: 'See Walmart.com for nearby stores',
-        storeUrl: `https://www.walmart.com/search?q=${encodeURIComponent(p.name)}`,
-        price: p.price,
-      },
-      {
-        storeName: 'GameStop', storeType: 'gamestop' as const,
-        inStock: false, stockUnknown: true,
-        distanceMiles: parseFloat((2.1 + (seed % 3)).toFixed(1)),
-        storeUrl: `https://www.gamestop.com/search#q=${encodeURIComponent(p.name)}`,
-        price: p.price,
-      },
-      {
-        storeName: 'Best Buy', storeType: 'bestbuy' as const,
-        inStock: false, stockUnknown: true,
-        distanceMiles: parseFloat((3.4 + (seed % 6)).toFixed(1)),
-        storeUrl: `https://www.bestbuy.com/site/searchpage.jsp?st=${encodeURIComponent(p.name)}`,
-        price: p.price,
-      },
-      {
-        storeName: 'Amazon', storeType: 'amazon' as const,
-        inStock: true, stockUnknown: false,
-        storeUrl: `https://www.amazon.com/s?k=pokemon+${encodeURIComponent(p.name)}`,
-        price: p.price * 1.1,
-      },
-    ],
-  }))
+function getFallbackProducts(_lat: number, _lon: number): StoreProduct[] {
+  return CURATED.map((p) => {
+    const { vintage, ...product } = p
+
+    if (vintage) {
+      // Vintage packs — not sold at retail, link to secondary market only
+      return {
+        ...product,
+        stores: [
+          {
+            storeName: 'TCGPlayer', storeType: 'amazon' as const,
+            inStock: false, stockUnknown: true,
+            storeUrl: `https://www.tcgplayer.com/search/pokemon/product?q=${encodeURIComponent(p.name)}`,
+          },
+          {
+            storeName: 'eBay', storeType: 'amazon' as const,
+            inStock: false, stockUnknown: true,
+            storeUrl: `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(p.name)}+pokemon+sealed`,
+          },
+          {
+            storeName: 'Amazon', storeType: 'amazon' as const,
+            inStock: false, stockUnknown: true,
+            storeUrl: `https://www.amazon.com/s?k=${encodeURIComponent(p.name)}+pokemon+sealed`,
+          },
+        ] as StoreStock[],
+      }
+    }
+
+    // Modern retail products — all stock unknown, link to each store's search
+    return {
+      ...product,
+      stores: [
+        { storeName: 'Target',   storeType: 'target'   as const, inStock: false, stockUnknown: true, storeUrl: `https://www.target.com/s?searchTerm=${encodeURIComponent(p.name)}`,                  price: p.price },
+        { storeName: 'Walmart',  storeType: 'walmart'  as const, inStock: false, stockUnknown: true, storeUrl: `https://www.walmart.com/search?q=${encodeURIComponent(p.name)}`,                     price: p.price },
+        { storeName: 'GameStop', storeType: 'gamestop' as const, inStock: false, stockUnknown: true, storeUrl: `https://www.gamestop.com/search#q=${encodeURIComponent(p.name)}`,                    price: p.price },
+        { storeName: 'Best Buy', storeType: 'bestbuy'  as const, inStock: false, stockUnknown: true, storeUrl: `https://www.bestbuy.com/site/searchpage.jsp?st=${encodeURIComponent(p.name)}`,       price: p.price },
+        { storeName: 'Amazon',   storeType: 'amazon'   as const, inStock: false, stockUnknown: true, storeUrl: `https://www.amazon.com/s?k=pokemon+${encodeURIComponent(p.name)}`,                  price: p.price * 1.1 },
+      ] as StoreStock[],
+    }
+  })
 }

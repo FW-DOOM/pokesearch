@@ -175,10 +175,10 @@ export default function StoreFinder() {
               .filter((s) => s.inStock && s.distanceMiles)
               .sort((a, b) => (a.distanceMiles ?? 99) - (b.distanceMiles ?? 99))[0]
 
-            // Lowest confirmed price across all in-stock stores
-            const inStockWithPrice = product.stores.filter(s => s.inStock && s.price && s.price > 0)
-            const cheapest = inStockWithPrice.length > 0
-              ? inStockWithPrice.reduce((b, s) => (s.price ?? 999) < (b.price ?? 999) ? s : b)
+            // Lowest price — only from stores with CONFIRMED live stock (not fallback/unknown)
+            const confirmedInStock = product.stores.filter(s => s.inStock && !s.stockUnknown && s.price && s.price > 0)
+            const cheapest = confirmedInStock.length > 0
+              ? confirmedInStock.reduce((b, s) => (s.price ?? 999) < (b.price ?? 999) ? s : b)
               : null
             const lowestPrice = cheapest ? {
               price: cheapest.price!,
@@ -221,7 +221,10 @@ export default function StoreFinder() {
                         </p>
                       </>
                     ) : (
-                      <p className="text-slate-400 font-bold text-lg">${product.price.toFixed(2)}</p>
+                      <>
+                        <p className="text-white font-black text-2xl leading-none">${product.price.toFixed(2)}</p>
+                        <p className="text-slate-500 text-xs mt-0.5">MSRP · tap for stores</p>
+                      </>
                     )}
                   </div>
                   <div className="flex flex-col items-end gap-1">
