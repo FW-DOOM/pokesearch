@@ -92,6 +92,17 @@ export async function getCardById(id: string): Promise<PokemonCard> {
   })
 }
 
+// Bypass cache — always fetches fresh price data from the API
+export async function refreshCardPrice(id: string): Promise<PokemonCard> {
+  const res = await fetch(`${BASE}/cards/${id}`)
+  if (!res.ok) throw new Error('Card not found')
+  const json = await res.json()
+  const card: PokemonCard = json.data
+  // Store updated card back into cache
+  localStorage.setItem(`poke:card:${id}`, JSON.stringify({ data: card, ts: Date.now() }))
+  return card
+}
+
 export function getCardMarketPrice(card: PokemonCard): number | null {
   // Try TCGPlayer first — pick highest available market price across all variants
   const prices = card.tcgplayer?.prices

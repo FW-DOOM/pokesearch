@@ -1,14 +1,15 @@
 import { useState } from 'react'
-import { type PokemonCard, getCardMarketPrice, getPullRate, getRarityTier, getAllPrices } from '../services/pokemonTcgApi'
+import { type PokemonCard, getCardMarketPrice, getPullRate, getRarityTier, getAllPrices, refreshCardPrice } from '../services/pokemonTcgApi'
 import { type PSAEstimation, detectFake } from '../services/cardAnalysis'
 import { toggleWatchlist, isWatched } from '../services/watchlist'
 import HoloCard from './HoloCard'
-import { DollarSign, TrendingUp, Shield, AlertTriangle, CheckCircle, XCircle, Star, Info, Heart, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react'
+import { DollarSign, TrendingUp, Shield, AlertTriangle, CheckCircle, XCircle, Star, Info, Heart, ExternalLink, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
 
 interface Props {
   card: PokemonCard
   psaEstimation: PSAEstimation | null
   capturedImage: string | null
+  onCardRefresh?: (updated: PokemonCard) => void
 }
 
 const RARITY_TIER_STYLES: Record<string, { badge: string; glow: string; header: string }> = {
@@ -31,7 +32,11 @@ function estimateGradedValue(raw: number | null, grade: number): number | null {
   return raw * (m[Math.round(grade)] ?? 1)
 }
 
-export default function CardDetails({ card, psaEstimation, capturedImage }: Props) {
+export default function CardDetails({ card: initialCard, psaEstimation, capturedImage, onCardRefresh }: Props) {
+  const [card, setCard] = useState(initialCard)
+  const [refreshing, setRefreshing] = useState(false)
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
+
   const marketPrice = getCardMarketPrice(card)
   const allPrices = getAllPrices(card)
   const pullRate = getPullRate(card.rarity)
@@ -43,6 +48,21 @@ export default function CardDetails({ card, psaEstimation, capturedImage }: Prop
   const [watched, setWatched] = useState(() => isWatched(card.id))
   const [showAllPrices, setShowAllPrices] = useState(false)
   const [heartAnim, setHeartAnim] = useState(false)
+
+  // Price last updated from TCGPlayer
+  const priceUpdatedAt = card.tcgplayer?.updatedAt ?? null
+
+  async function handleRefreshPrice() {
+    if (refreshing) return
+    setRefreshing(true)
+    try {
+      const updated = await refreshCardPrice(card.id)
+      setCard(updated)
+      setLastRefreshed(new Date())
+      onCardRefresh?.(updated)
+    } catch { /* ignore */ }
+    finally { setRefreshing(false) }
+  }
 
   function handleWatch() {
     const now = toggleWatchlist(card, marketPrice)
@@ -90,12 +110,36 @@ export default function CardDetails({ card, psaEstimation, capturedImage }: Prop
             <p className="text-slate-500 text-xs">{card.supertype}{card.subtypes?.length ? ` · ${card.subtypes.join(', ')}` : ''}</p>
           )}
 
-          {/* Quick price */}
+          {/* Quick price + live refresh */}
           {marketPrice !== null && (
             <div className="mt-auto">
-              <p className="text-yellow-400 font-black text-2xl leading-none">${marketPrice.toFixed(2)}</p>
-              <p className="text-slate-500 text-xs">TCGPlayer market</p>
+              <div className="flex items-end gap-2">
+                <p className="text-yellow-400 font-black text-2xl leading-none">${marketPrice.toFixed(2)}</p>
+                <button
+                  onClick={handleRefreshPrice}
+                  disabled={refreshing}
+                  className="mb-0.5 p-1 rounded-lg bg-slate-700/60 hover:bg-slate-600 transition-colors disabled:opacity-40"
+                  title="Refresh live price"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${refreshing ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+              <p className="text-slate-500 text-xs">
+                TCGPlayer market ·{' '}
+                {lastRefreshed
+                  ? <span className="text-green-400">Updated just now</span>
+                  : priceUpdatedAt
+                  ? <span>Data from {priceUpdatedAt}</span>
+                  : 'Cached'}
+              </p>
             </div>
+          )}
+          {marketPrice === null && (
+            <button onClick={handleRefreshPrice} disabled={refreshing}
+              className="mt-auto flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors">
+              <RefreshCw className={`w-3 h-3 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? 'Fetching price...' : 'Fetch live price'}
+            </button>
           )}
         </div>
       </div>

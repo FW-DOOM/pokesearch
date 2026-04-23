@@ -209,18 +209,42 @@ export async function analyzeCardImage(canvas: HTMLCanvasElement): Promise<PSAEs
     reasoning.push('Surface appears clean with no major scratches')
   }
 
+  // ── Global entropy check ─────────────────────────────────────────────
+  // Sample the whole image at low density. Very high global variance means
+  // the card is massively damaged (torn pieces, heavy creasing) even if
+  // our region-by-region checks missed some of it.
+  const globalSamples = sampleBrightness(data, w, 0, 0, w, h)
+  const globalDev = stdDev(globalSamples)
+
+  if (globalDev > 80) {
+    reasoning.push('Extremely high image chaos — severe physical damage detected across the whole card')
+  } else if (globalDev > 65) {
+    reasoning.push('High overall image variance — significant damage or heavy wear present')
+  }
+
   // ── Grade calculation ─────────────────────────────────────────────────
-  // Start at 8 — most cards being held up to a camera are NM, not gem mint.
-  // Heavier deductions than before so truly trashed cards actually bottom out.
   let grade = 8
 
   const majorDmg  = damageRegions.filter(r => r.severity === 'major').length
   const modDmg    = damageRegions.filter(r => r.severity === 'moderate').length
   const minorDmg  = damageRegions.filter(r => r.severity === 'minor').length
+  const totalDmg  = damageRegions.length
 
-  grade -= majorDmg  * 3.0   // was 2.5
-  grade -= modDmg    * 1.5   // was 1.2
-  grade -= minorDmg  * 0.5   // was 0.4
+  grade -= majorDmg  * 3.0
+  grade -= modDmg    * 1.5
+  grade -= minorDmg  * 0.5
+
+  // Global entropy hard caps — override individual region deductions
+  // so a destroyed card can't slip through as NM just because
+  // individual region thresholds weren't met
+  if (globalDev > 80)      grade = Math.min(grade, 2)   // catastrophic
+  else if (globalDev > 70) grade = Math.min(grade, 4)   // severe
+  else if (globalDev > 65) grade = Math.min(grade, 6)   // heavy damage
+
+  // Damage count caps — if nearly every region is flagged, something is very wrong
+  if (totalDmg >= 8)       grade = Math.min(grade, 1)   // everything damaged = destroyed
+  else if (totalDmg >= 6)  grade = Math.min(grade, 3)   // most regions damaged
+  else if (totalDmg >= 4 && wornCorners === 4) grade = Math.min(grade, 5)
 
   // Clamp 1–9, round to nearest 0.5
   grade = Math.max(1, Math.min(9, Math.round(grade * 2) / 2))

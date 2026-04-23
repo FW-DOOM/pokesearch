@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { MapPin, Camera, Zap, ArrowLeftRight, HelpCircle, Heart, Package, X } from 'lucide-react'
+import { MapPin, Camera, Zap, ArrowLeftRight, HelpCircle, Heart, Package, X, Settings2 } from 'lucide-react'
 import StoreFinder from './components/StoreFinder'
 import CardScanner from './components/CardScanner'
 import TradeCompare from './components/TradeCompare'
 import PackEV from './components/PackEV'
 import Watchlist from './components/Watchlist'
 import OnboardingModal from './components/OnboardingModal'
+import Settings from './components/Settings'
 import { getCardById } from './services/pokemonTcgApi'
 import CardDetails from './components/CardDetails'
 import { getWatchlist } from './services/watchlist'
@@ -23,6 +24,7 @@ const TAB_CONFIG: { id: Tab; label: string; icon: React.ReactNode; desc: string 
 export default function App() {
   const [tab, setTab] = useState<Tab>('store')
   const [showHelp, setShowHelp] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const [watchlistCard, setWatchlistCard] = useState<Awaited<ReturnType<typeof getCardById>> | null>(null)
   const [watchCount, setWatchCount] = useState(() => getWatchlist().length)
   const [headerGlow, setHeaderGlow] = useState(false)
@@ -54,6 +56,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#0a0a14] flex flex-col">
       <OnboardingModal />
+      {showSettings && <Settings onClose={() => setShowSettings(false)} />}
 
       {/* ── Header ─────────────────────────────────────────────────── */}
       <header className={`sticky top-0 z-40 border-b border-slate-800 transition-all duration-300 ${headerGlow ? 'bg-[#0f0f20]/98' : 'bg-[#0a0a14]/96'} backdrop-blur`}>
@@ -67,6 +70,10 @@ export default function App() {
           </div>
 
           <div className="ml-auto flex items-center gap-2">
+            <button onClick={() => setShowSettings(true)}
+              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
+              <Settings2 className="w-5 h-5" />
+            </button>
             <div className="relative">
               <button onClick={() => setShowHelp((v) => !v)}
                 className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
