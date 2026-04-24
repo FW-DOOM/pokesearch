@@ -5,11 +5,12 @@ import {
   type BoxType,
   type PremiumBox,
   type RedditAlert,
+  type FavMatch,
   getFavorites,
   toggleFavorite,
   getRedditRestockAlerts,
   requestNotificationPermission,
-  checkAndNotifyFavorites,
+  checkFavoritesAgainstAlerts,
 } from '../services/premiumBoxes'
 
 const FILTER_TABS: { label: string; value: BoxType | 'all' | 'hot' }[] = [
@@ -201,15 +202,28 @@ export default function PremiumBoxes() {
   const [alertsLoading, setAlertsLoading] = useState(false)
   const [notifGranted, setNotifGranted]   = useState(() => typeof Notification !== 'undefined' && Notification.permission === 'granted')
   const [notifDenied, setNotifDenied]     = useState(() => typeof Notification !== 'undefined' && Notification.permission === 'denied')
+  const [toasts, setToasts]               = useState<FavMatch[]>([])
 
-  // Load Reddit alerts on mount and check favorites for notifications
-  useEffect(() => {
+  function addToast(match: FavMatch) {
+    setToasts((t) => [match, ...t].slice(0, 3))
+    setTimeout(() => setToasts((t) => t.filter((x) => x !== match)), 8000)
+  }
+
+  async function refreshAlerts() {
     setAlertsLoading(true)
-    getRedditRestockAlerts()
-      .then(setAlerts)
-      .finally(() => setAlertsLoading(false))
+    const newAlerts = await getRedditRestockAlerts()
+    setAlerts(newAlerts)
+    setAlertsLoading(false)
+    // Check favorites against fresh alerts and show toasts
+    const matches = await checkFavoritesAgainstAlerts()
+    matches.forEach(addToast)
+  }
 
-    checkAndNotifyFavorites()
+  // Load alerts on mount + poll every 2 min while tab is open
+  useEffect(() => {
+    refreshAlerts()
+    const interval = setInterval(refreshAlerts, 2 * 60 * 1000)
+    return () => clearInterval(interval)
   }, [])
 
   const handleFavToggle = useCallback((id: string) => {
@@ -220,8 +234,8 @@ export default function PremiumBoxes() {
   async function handleEnableNotifications() {
     const granted = await requestNotificationPermission()
     setNotifGranted(granted)
-    setNotifDenied(!granted && Notification.permission === 'denied')
-    if (granted) checkAndNotifyFavorites()
+    setNotifDenied(!granted && typeof Notification !== 'undefined' && Notification.permission === 'denied')
+    if (granted) checkFavoritesAgainstAlerts().then((m) => m.forEach(addToast))
   }
 
   const filtered = PREMIUM_BOXES.filter((b) => {
@@ -232,6 +246,27 @@ export default function PremiumBoxes() {
 
   return (
     <div className="flex flex-col gap-4">
+
+      {/* In-app toast alerts for favorites */}
+      {toasts.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {toasts.map((t, i) => (
+            <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-yellow-400/10 border border-yellow-400/40 animate-pulse">
+              <span className="text-xl">⭐</span>
+              <div className="flex-1">
+                <p className="text-yellow-300 font-bold text-sm">Restock spotted!</p>
+                <p className="text-yellow-200 text-xs mt-0.5">{t.boxName} seen at {t.store}</p>
+                <a href={t.alert.url} target="_blank" rel="noopener noreferrer"
+                  className="text-yellow-400 text-xs underline mt-1 inline-block">
+                  View post on Reddit →
+                </a>
+              </div>
+              <button onClick={() => setToasts((p) => p.filter((_, j) => j !== i))}
+                className="text-yellow-600 hover:text-yellow-300 text-lg leading-none">×</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Notification banner */}
       {!notifGranted && !notifDenied && (
@@ -270,10 +305,7 @@ export default function PremiumBoxes() {
             <span className="text-xs text-slate-500 font-normal">from r/pokemontcg</span>
           </h2>
           <button
-            onClick={() => {
-              setAlertsLoading(true)
-              getRedditRestockAlerts().then(setAlerts).finally(() => setAlertsLoading(false))
-            }}
+            onClick={refreshAlerts}
             className="p-1 text-slate-500 hover:text-white transition-colors"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${alertsLoading ? 'animate-spin' : ''}`} />

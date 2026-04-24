@@ -280,16 +280,17 @@ export function isFavorite(id: string): boolean {
 // Uses Reddit's public read-only JSON API — no auth required.
 // Supplements (but does not replace) the curated restock schedule.
 
-const RESTOCK_KEYWORDS = ['restock', 'found', 'in stock', 'spotted', 'available', 'restocked']
+const RESTOCK_KEYWORDS = ['restock', 'found', 'in stock', 'spotted', 'available', 'restocked', 'just got', 'picked up', 'my local', 'check your']
+const BOX_KEYWORDS    = ['pokemon', 'destined rivals', 'prismatic', 'etb', 'booster', 'elite trainer', 'surging sparks', 'stellar crown', '151']
 
 function isRestockPost(title: string): boolean {
   const t = title.toLowerCase()
-  return RESTOCK_KEYWORDS.some((kw) => t.includes(kw)) &&
-    (t.includes('pokemon') || t.includes('destined rivals') || t.includes('prismatic') || t.includes('etb') || t.includes('booster'))
+  return RESTOCK_KEYWORDS.some((kw) => t.includes(kw)) && BOX_KEYWORDS.some((kw) => t.includes(kw))
 }
 
 function timeAgo(utcSeconds: number): string {
   const diff = Math.floor(Date.now() / 1000) - utcSeconds
+  if (diff < 60)    return 'just now'
   if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
   return `${Math.floor(diff / 86400)}d ago`
@@ -297,43 +298,61 @@ function timeAgo(utcSeconds: number): string {
 
 function extractStore(title: string): string | undefined {
   const t = title.toLowerCase()
-  if (t.includes('target'))    return 'Target'
-  if (t.includes('walmart'))   return 'Walmart'
-  if (t.includes('gamestop'))  return 'GameStop'
-  if (t.includes('best buy'))  return 'Best Buy'
-  if (t.includes('amazon'))    return 'Amazon'
-  if (t.includes('costco'))    return 'Costco'
+  if (t.includes('target'))     return 'Target'
+  if (t.includes('walmart'))    return 'Walmart'
+  if (t.includes('gamestop'))   return 'GameStop'
+  if (t.includes('best buy'))   return 'Best Buy'
+  if (t.includes('amazon'))     return 'Amazon'
+  if (t.includes('costco'))     return 'Costco'
   if (t.includes('five below')) return 'Five Below'
+  if (t.includes('hot topic'))  return 'Hot Topic'
   return undefined
 }
 
 let _alertCache: { data: RedditAlert[]; ts: number } | null = null
-const ALERT_TTL = 5 * 60 * 1000 // 5 min
+const ALERT_TTL = 3 * 60 * 1000 // 3 min
 
 export async function getRedditRestockAlerts(): Promise<RedditAlert[]> {
   if (_alertCache && Date.now() - _alertCache.ts < ALERT_TTL) return _alertCache.data
 
-  try {
-    const url = 'https://www.reddit.com/r/pokemontcg/search.json?q=restock+found+in+stock+pokemon+cards&sort=new&limit=25&t=day&restrict_sr=1'
-    const res = await fetch(url, { headers: { Accept: 'application/json' } })
-    if (!res.ok) throw new Error('Reddit fetch failed')
-    const json = await res.json()
+  // Use /new.json — no query params, better CORS support than search endpoint
+  const urls = [
+    'https://www.reddit.com/r/pokemontcg/new.json?limit=50',
+    'https://www.reddit.com/r/pokemontcg/hot.json?limit=25',
+  ]
 
-    const posts: RedditAlert[] = (json.data?.children ?? [])
-      .filter((c: { data: { title: string } }) => isRestockPost(c.data.title))
-      .slice(0, 6)
-      .map((c: { data: { title: string; permalink: string; created_utc: number; score: number } }) => ({
-        title:     c.data.title,
-        url:       `https://www.reddit.com${c.data.permalink}`,
-        store:     extractStore(c.data.title),
-        postedAgo: timeAgo(c.data.created_utc),
-        upvotes:   c.data.score,
-      }))
+  try {
+    const results = await Promise.allSettled(
+      urls.map((u) => fetch(u, { headers: { Accept: 'application/json' } }).then((r) => r.json()))
+    )
+
+    const seen = new Set<string>()
+    const posts: RedditAlert[] = []
+
+    for (const res of results) {
+      if (res.status !== 'fulfilled') continue
+      const children = res.value?.data?.children ?? []
+      for (const c of children) {
+        const d = c.data
+        if (seen.has(d.id)) continue
+        seen.add(d.id)
+        if (!isRestockPost(d.title)) continue
+        posts.push({
+          title:     d.title,
+          url:       `https://www.reddit.com${d.permalink}`,
+          store:     extractStore(d.title),
+          postedAgo: timeAgo(d.created_utc),
+          upvotes:   d.score,
+        })
+        if (posts.length >= 8) break
+      }
+      if (posts.length >= 8) break
+    }
 
     _alertCache = { data: posts, ts: Date.now() }
     return posts
   } catch {
-    return []
+    return _alertCache?.data ?? []
   }
 }
 
@@ -348,36 +367,46 @@ export async function requestNotificationPermission(): Promise<boolean> {
 }
 
 export function notifyRestock(boxName: string, store: string) {
+  if (!('Notification' in window)) return
   if (Notification.permission !== 'granted') return
-  new Notification('🔴 Restock Alert — PokeSearch', {
-    body: `${boxName} spotted at ${store}! Check now before it sells out.`,
-    icon: '/apple-touch-icon.png',
-    badge: '/apple-touch-icon.png',
-  })
+  try {
+    new Notification('⭐ Restock Alert — PokeSearch', {
+      body: `${boxName} spotted at ${store}! Check now before it sells out.`,
+      icon: '/pokesearch/apple-touch-icon.png',
+    })
+  } catch { /* iOS may throw even with permission */ }
 }
 
-// Check Reddit alerts for favorited boxes and fire notifications for new hits
+// Returns matched box name + alert if a favorited box appears in Reddit alerts
 let _notifiedUrls = new Set<string>()
 
-export async function checkAndNotifyFavorites(): Promise<void> {
+export interface FavMatch { boxName: string; store: string; alert: RedditAlert }
+
+export async function checkFavoritesAgainstAlerts(): Promise<FavMatch[]> {
   const favIds = getFavorites()
-  if (favIds.length === 0) return
-  if (Notification.permission !== 'granted') return
+  if (favIds.length === 0) return []
 
-  const favNames = PREMIUM_BOXES
-    .filter((b) => favIds.includes(b.id))
-    .map((b) => b.name.toLowerCase())
+  const favBoxes = PREMIUM_BOXES.filter((b) => favIds.includes(b.id))
+  const alerts   = await getRedditRestockAlerts()
+  const matches: FavMatch[] = []
 
-  const alerts = await getRedditRestockAlerts()
   for (const alert of alerts) {
     if (_notifiedUrls.has(alert.url)) continue
     const titleLow = alert.title.toLowerCase()
-    const matched = favNames.find((name) =>
-      name.split(' ').slice(0, 3).some((word) => word.length > 3 && titleLow.includes(word))
-    )
-    if (matched) {
-      _notifiedUrls.add(alert.url)
-      notifyRestock(matched.replace(/\b\w/g, (c) => c.toUpperCase()), alert.store ?? 'a store')
+
+    for (const box of favBoxes) {
+      // Match any meaningful word from the box name against the post title
+      const words = box.name.toLowerCase().split(' ').filter((w) => w.length > 3)
+      const matched = words.filter((w) => titleLow.includes(w)).length >= 2
+      if (matched) {
+        _notifiedUrls.add(alert.url)
+        matches.push({ boxName: box.name, store: alert.store ?? 'a store', alert })
+        // Also fire browser notification if permission granted
+        notifyRestock(box.name, alert.store ?? 'a store')
+        break
+      }
     }
   }
+
+  return matches
 }
