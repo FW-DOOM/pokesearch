@@ -1,23 +1,26 @@
 import { useState, useEffect } from 'react'
-import { MapPin, Camera, Zap, ArrowLeftRight, HelpCircle, Heart, Package, X, Settings2 } from 'lucide-react'
+import { MapPin, Camera, Zap, ArrowLeftRight, HelpCircle, Heart, Package, X, Settings2, Trophy } from 'lucide-react'
 import StoreFinder from './components/StoreFinder'
 import CardScanner from './components/CardScanner'
 import TradeCompare from './components/TradeCompare'
 import PackEV from './components/PackEV'
 import Watchlist from './components/Watchlist'
+import PremiumBoxes from './components/PremiumBoxes'
 import OnboardingModal from './components/OnboardingModal'
 import Settings from './components/Settings'
 import { getCardById } from './services/pokemonTcgApi'
 import CardDetails from './components/CardDetails'
 import { getWatchlist } from './services/watchlist'
+import { getFavorites } from './services/premiumBoxes'
 
-type Tab = 'store' | 'scanner' | 'trade' | 'ev' | 'watchlist'
+type Tab = 'store' | 'scanner' | 'trade' | 'ev' | 'premium' | 'watchlist'
 
 const TAB_CONFIG: { id: Tab; label: string; icon: React.ReactNode; desc: string }[] = [
   { id: 'store',     label: 'Find',      icon: <MapPin className="w-3.5 h-3.5" />,         desc: 'Find packs & boxes at nearby stores' },
   { id: 'scanner',   label: 'Scan',      icon: <Camera className="w-3.5 h-3.5" />,          desc: 'Scan or search any card for price, PSA & damage' },
   { id: 'trade',     label: 'Trade',     icon: <ArrowLeftRight className="w-3.5 h-3.5" />,  desc: 'Compare two cards — is the trade fair?' },
   { id: 'ev',        label: 'Pack EV',   icon: <Package className="w-3.5 h-3.5" />,         desc: 'Expected value of any set\'s packs & boxes' },
+  { id: 'premium',   label: 'Boxes',     icon: <Trophy className="w-3.5 h-3.5" />,          desc: 'Premium boxes with restock schedules & alerts' },
   { id: 'watchlist', label: 'Saved',     icon: <Heart className="w-3.5 h-3.5" />,           desc: 'Your saved cards & prices' },
 ]
 
@@ -27,6 +30,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [watchlistCard, setWatchlistCard] = useState<Awaited<ReturnType<typeof getCardById>> | null>(null)
   const [watchCount, setWatchCount] = useState(() => getWatchlist().length)
+  const [favCount, setFavCount]     = useState(() => getFavorites().length)
   const [headerGlow, setHeaderGlow] = useState(false)
 
   // Subtle header pulse on tab switch
@@ -107,7 +111,11 @@ export default function App() {
           {TAB_CONFIG.map((t) => (
             <button
               key={t.id}
-              onClick={() => { setTab(t.id); if (t.id === 'watchlist') updateWatchCount() }}
+              onClick={() => {
+                setTab(t.id)
+                if (t.id === 'watchlist') updateWatchCount()
+                if (t.id === 'premium')   setFavCount(getFavorites().length)
+              }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
                 tab === t.id
                   ? 'bg-yellow-400 text-black shadow-md shadow-yellow-400/20'
@@ -121,6 +129,11 @@ export default function App() {
                   {watchCount}
                 </span>
               )}
+              {t.id === 'premium' && favCount > 0 && (
+                <span className={`text-xs rounded-full px-1.5 py-0.5 font-bold leading-none ${tab === 'premium' ? 'bg-black/20 text-black' : 'bg-yellow-500 text-black'}`}>
+                  ★{favCount}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -130,10 +143,11 @@ export default function App() {
       <div className="max-w-2xl mx-auto w-full px-4 pt-4 pb-1">
         <h1 className="text-white font-bold text-2xl flex items-center gap-2">
           <span className="text-yellow-400">{current.icon}</span>
-          {current.label === 'Find' ? 'Nearby Pokémon Products'
-            : current.label === 'Scan' ? 'Card Scanner'
-            : current.label === 'Trade' ? 'Trade Compare'
-            : current.label === 'Pack EV' ? 'Pack Expected Value'
+          {current.label === 'Find'    ? 'Nearby Pokémon Products'
+            : current.label === 'Scan'   ? 'Card Scanner'
+            : current.label === 'Trade'  ? 'Trade Compare'
+            : current.label === 'Pack EV'? 'Pack Expected Value'
+            : current.label === 'Boxes'  ? 'Premium Boxes'
             : 'Saved Cards'}
         </h1>
         <p className="text-slate-500 text-sm mt-0.5">{current.desc}</p>
@@ -145,6 +159,7 @@ export default function App() {
         {tab === 'scanner'   && <CardScanner />}
         {tab === 'trade'     && <TradeCompare />}
         {tab === 'ev'        && <PackEV />}
+        {tab === 'premium'   && <PremiumBoxes />}
         {tab === 'watchlist' && (
           watchlistCard ? (
             <div className="flex flex-col gap-4">
