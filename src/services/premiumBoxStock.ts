@@ -100,8 +100,8 @@ async function searchWalmart(keyword: string) {
 // ─── Main stock check ─────────────────────────────────────────────────────────
 
 async function fetchBoxStock(
-  boxId: string,
-  boxName: string,
+  _boxId: string,
+  _boxName: string,
   searchKeyword: string,
   lat: number,
   lon: number,
@@ -180,7 +180,7 @@ async function fetchBoxStock(
   return { stocks: liveStocks, hasLiveData, checkedAt: Date.now() }
 }
 
-function buildFallbackStocks(boxName: string, keyword: string): LiveStoreStock[] {
+function buildFallbackStocks(_boxName: string, keyword: string): LiveStoreStock[] {
   const enc = encodeURIComponent(keyword)
   return [
     {

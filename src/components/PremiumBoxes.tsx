@@ -15,7 +15,6 @@ import {
 import {
   type BoxStockResult,
   checkBoxStock,
-  checkFavoritesStock,
 } from '../services/premiumBoxStock'
 import { useGeolocation } from '../hooks/useGeolocation'
 
