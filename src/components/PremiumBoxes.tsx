@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Star, ChevronDown, ChevronUp, Bell, BellOff, Clock, ExternalLink, AlertCircle, RefreshCw } from 'lucide-react'
+import { Star, ChevronDown, ChevronUp, Bell, BellOff, Clock, ExternalLink, AlertCircle, RefreshCw, Wifi, WifiOff } from 'lucide-react'
 import {
   PREMIUM_BOXES,
   type BoxType,
@@ -12,6 +12,12 @@ import {
   requestNotificationPermission,
   checkFavoritesAgainstAlerts,
 } from '../services/premiumBoxes'
+import {
+  type BoxStockResult,
+  checkBoxStock,
+  checkFavoritesStock,
+} from '../services/premiumBoxStock'
+import { useGeolocation } from '../hooks/useGeolocation'
 
 const FILTER_TABS: { label: string; value: BoxType | 'all' | 'hot' }[] = [
   { label: 'All',         value: 'all' },
@@ -49,10 +55,13 @@ function stockDot(status: PremiumBox['stockStatus']) {
 
 // ─── Box Card ────────────────────────────────────────────────────────────────
 
-function BoxCard({ box, favIds, onFavToggle }: {
+function BoxCard({ box, favIds, onFavToggle, liveStock, onCheckStock, stockLoading }: {
   box: PremiumBox
   favIds: string[]
   onFavToggle: (id: string) => void
+  liveStock?: BoxStockResult
+  onCheckStock: (box: PremiumBox) => void
+  stockLoading: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
   const isFav = favIds.includes(box.id)
@@ -112,29 +121,52 @@ function BoxCard({ box, favIds, onFavToggle }: {
           </div>
         </div>
 
-        {/* Store link buttons */}
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {box.storeLinks.map((link) => (
-            <a
-              key={link.store}
-              href={link.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg text-white transition-opacity hover:opacity-90 ${STORE_COLORS[link.store] ?? 'bg-slate-600'}`}
-            >
-              {link.store}
-              {link.price && link.isRetail && (
-                <span className="opacity-80">${link.price}</span>
-              )}
-              <ExternalLink className="w-2.5 h-2.5 opacity-70" />
-            </a>
-          ))}
-        </div>
+        {/* Live stock results */}
+        {liveStock && (
+          <div className="mt-3">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              {liveStock.hasLiveData
+                ? <><Wifi className="w-3 h-3 text-green-400" /><span className="text-green-400 text-xs font-semibold">Live Stock</span></>
+                : <><WifiOff className="w-3 h-3 text-slate-500" /><span className="text-slate-500 text-xs">Store links</span></>}
+              <span className="text-slate-600 text-xs ml-auto">
+                {new Date(liveStock.checkedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {liveStock.stocks.map((s) => (
+                <a key={s.store} href={s.url} target="_blank" rel="noopener noreferrer"
+                  className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg text-white transition-opacity hover:opacity-90 ${STORE_COLORS[s.store.split(' — ')[0]] ?? 'bg-slate-600'}`}>
+                  {s.store.split(' — ')[0]}
+                  {s.distanceMiles != null && <span className="opacity-70 text-[10px]">{s.distanceMiles}mi</span>}
+                  {!s.stockUnknown && (
+                    <span className={`text-[10px] font-bold px-1 rounded ${s.inStock ? 'bg-green-500/30 text-green-300' : 'bg-red-500/30 text-red-300'}`}>
+                      {s.inStock ? '✓' : '✗'}
+                    </span>
+                  )}
+                  <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Check stock button (shown when no live data yet) */}
+        {!liveStock && (
+          <button
+            onClick={() => onCheckStock(box)}
+            disabled={stockLoading}
+            className="mt-3 w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-all disabled:opacity-50"
+          >
+            {stockLoading
+              ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Checking stores…</>
+              : <><Wifi className="w-3.5 h-3.5" /> Check Stock Near Me</>}
+          </button>
+        )}
 
         {/* Restock schedule toggle */}
         <button
           onClick={() => setExpanded((v) => !v)}
-          className="mt-3 flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors w-full"
+          className="mt-2 flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors w-full"
         >
           <Clock className="w-3.5 h-3.5" />
           <span>Restock Schedule</span>
@@ -203,6 +235,10 @@ export default function PremiumBoxes() {
   const [notifGranted, setNotifGranted]   = useState(() => typeof Notification !== 'undefined' && Notification.permission === 'granted')
   const [notifDenied, setNotifDenied]     = useState(() => typeof Notification !== 'undefined' && Notification.permission === 'denied')
   const [toasts, setToasts]               = useState<FavMatch[]>([])
+  // Live store stock per boxId
+  const [stockMap, setStockMap]           = useState<Record<string, BoxStockResult>>({})
+  const [stockLoading, setStockLoading]   = useState<string | null>(null)
+  const geo = useGeolocation()
 
   function addToast(match: FavMatch) {
     setToasts((t) => [match, ...t].slice(0, 3))
@@ -225,6 +261,37 @@ export default function PremiumBoxes() {
     const interval = setInterval(refreshAlerts, 2 * 60 * 1000)
     return () => clearInterval(interval)
   }, [])
+
+  // Check a single box's stock manually
+  async function handleCheckStock(box: PremiumBox) {
+    if (!geo.lat || !geo.lon) return
+    setStockLoading(box.id)
+    try {
+      const result = await checkBoxStock(box.id, box.name, geo.lat, geo.lon)
+      setStockMap((m) => ({ ...m, [box.id]: result }))
+    } finally {
+      setStockLoading(null)
+    }
+  }
+
+  // Auto-check favorited boxes when geo is ready
+  useEffect(() => {
+    if (!geo.lat || !geo.lon || favIds.length === 0) return
+    const favBoxes = PREMIUM_BOXES.filter((b) => favIds.includes(b.id))
+    Promise.allSettled(
+      favBoxes.map(async (box) => {
+        const result = await checkBoxStock(box.id, box.name, geo.lat!, geo.lon!)
+        setStockMap((m) => ({ ...m, [box.id]: result }))
+        // Toast if live in-stock hit
+        if (result.hasLiveData) {
+          const inStockStore = result.stocks.find((s) => s.inStock && !s.stockUnknown)
+          if (inStockStore) {
+            addToast({ boxName: box.name, store: inStockStore.store, alert: { title: '', url: inStockStore.url, postedAgo: '', upvotes: 0 } })
+          }
+        }
+      })
+    )
+  }, [geo.lat, geo.lon, favIds.join(',')])
 
   const handleFavToggle = useCallback((id: string) => {
     toggleFavorite(id)
@@ -354,6 +421,9 @@ export default function PremiumBoxes() {
             box={box}
             favIds={favIds}
             onFavToggle={handleFavToggle}
+            liveStock={stockMap[box.id]}
+            onCheckStock={handleCheckStock}
+            stockLoading={stockLoading === box.id}
           />
         ))}
       </div>
