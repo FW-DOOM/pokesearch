@@ -106,7 +106,7 @@ async function fetchBoxStock(
   lat: number,
   lon: number,
 ): Promise<BoxStockResult> {
-  const fallbackStocks = buildFallbackStocks(boxName, searchKeyword)
+  const fallbackStocks = buildFallbackStocks(_boxName, searchKeyword)
 
   // Try Target ------------------------------------------------------------------
   let targetStocks: LiveStoreStock[] = []
